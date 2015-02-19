@@ -5,20 +5,21 @@ import streams, parsexml, re, strutils
 
 # This regex matches anywhere in the text that there *might* be wiki syntax
 # that we have to clean up.
-var ANYTHING_INTERESTING_RE: Regex = re"[*#:{['=]"
+let ANYTHING_INTERESTING_RE: Regex = re"[*#:{[']"
 
 # We skip the contents of these HTML tags entirely, and they don't nest
 # inside each other.
-var SKIP_SPANS = [
+let SKIP_SPANS = [
     "cite", "hiero", "gallery", "timeline", "noinclude",
     "caption", "ref", "references", "img", "source", "math"
 ]
 
 # This regex is for matching and skipping over simple wikitext formatting.
-var FORMATTING_RE: Regex = re(r"('''|''|^[ *#:]+|^[ =]+|[ =]+$)", {reMultiLine})
+let FORMATTING_RE: Regex = re(r"('''|''|^#\s*REDIRECT.*$|^[ *#:]+|^[|].*$)", {reMultiLine})
+let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
 
-var FAKE_FILENAME = "<wikipage>"
-
+let FAKE_FILENAME = "<wikipage>"
+let TEMPLATE_SYMBOL = ""  # define this as a string to replace templates with
 
 proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
     ## Move our position 'pos' forward in the text, to skip a number of
@@ -29,46 +30,42 @@ proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
     pos += 1
     var count = 1
     while count > 0 and pos < text.len:
-        var nextPos: int = text.find({open, close}, pos)
+        let nextPos: int = text.find({open, close}, pos)
         if nextPos == -1:
             # We can't find any more closing characters in the text.
             # Abort here so that there's something left.
             return
         else:
-            var nextChar: char = text[nextPos]
+            let nextChar: char = text[nextPos]
             if nextChar == open:
                 count += 1
             else:
                 count -= 1
             pos = nextPos + 1
 
-
 # forward declaration
 proc filterWikitext(text: string): string
 
 proc extractInternalLink(linkText: string): string =
-    var contents: string = filterWikitext(linkText[2 .. < -2])
-    var parts: seq[string]
-    parts = contents.split('|')
-    if parts.len == 0:
+    # Links with colons might be special MediaWiki syntax. Just throw them
+    # all away.
+    if linkText.contains(':'):
         return ""
-
-    var linkName: string = parts[parts.len - 1]
-    if parts[0].contains(':') or linkName == "*":
-        return ""
-    return linkName
+    let contents: string = filterWikitext(linkText[2 .. < -2])
+    let lastPart: int = contents.rfind('|') + 1
+    return contents[lastPart .. -1]
 
 
 proc extractExternalLink(linkText: string): string =
-    var spacePos = linkText.find(' ')
+    let spacePos = linkText.find(' ')
     if spacePos == -1:
         return ""
     else:
-        return linkText[spacePos + 1 .. < -1]
+        return filterWikitext(linkText[spacePos + 1 .. < -1])
 
 
 proc filterLink(text: string, pos: var int): string =
-    var startPos: int = pos
+    let startPos: int = pos
 
     # No matter what, move pos to the end of the link
     skipNestedChars(text, pos, '[', ']')
@@ -85,7 +82,7 @@ proc filterLink(text: string, pos: var int): string =
 
 proc filterHTML(text: string): string =
     var xml: XmlParser
-    var tstream: StringStream = newStringStream(text)
+    let tstream: StringStream = newStringStream(text)
     result = ""
     xml.open(tstream, FAKE_FILENAME, options={reportWhitespace})
     while true:
@@ -93,7 +90,7 @@ proc filterHTML(text: string): string =
         case xml.kind
         of xmlElementStart, xmlElementOpen:
             if SKIP_SPANS.contains(xml.elementName):
-                var skipTo: string = xml.elementName
+                let skipTo: string = xml.elementName
                 while true:
                     xml.next()
                     if xml.kind == xmlElementEnd and xml.elementName == skipTo:
@@ -120,7 +117,6 @@ proc filterWikitext(text: string): string =
     # of the procedures this relies on will also advance 'pos' themselves.
     result = ""
     var pos = 0
-    var matched: int
     while pos < text.len:
         # Skip to the next character that could be wiki syntax.
         var found: int = text.find(ANYTHING_INTERESTING_RE, pos)
@@ -135,8 +131,9 @@ proc filterWikitext(text: string): string =
         pos = found
         if pos < text.len:
             if text[pos .. pos+1] == "{{" or text[pos .. pos+1] == "{|":
-                # skip template invocations
+                # replace template invocations with <T>
                 skipNestedChars(text, pos, '{', '}')
+                result.add(TEMPLATE_SYMBOL)
 
             elif text[pos] == '[':
                 # pos gets updated by filterLink
@@ -144,7 +141,7 @@ proc filterWikitext(text: string): string =
 
             else:
                 # Skip over formatting
-                matched = text.matchLen(FORMATTING_RE, pos)
+                let matched = text.matchLen(FORMATTING_RE, pos)
                 if matched > 0:
                     pos += matched
                 else:
@@ -165,14 +162,17 @@ var RELEVANT_XML_TAGS = ["title", "text", "redirect", "ns"]
 
 proc handleArticle(article: ArticleData) =
     if article[NS] == "0" and article[REDIRECT] == "":
-        echo("\n## ", article[TITLE])
-        echo(filterWikitext(filterHTML(article[TEXT])))
+        echo("= $1 =" % [article[TITLE]])
+        let text = filterWikitext(filterHTML(article[TEXT]))
+        echo(text.replace(BLANK_LINE_RE, "\n"))
 
 
 proc readMediaWikiXML(input: Stream, filename="<input>") =
     var xml: XmlParser
-    var textBuffer: string
+    var textBuffer: string = ""
     var article: ArticleData
+    for tag in TITLE..NS:
+        article[tag] = ""
     var gettingText: bool = false
     xml.open(input, filename, options={reportWhitespace})
     while true:
@@ -180,12 +180,11 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
         case xml.kind
         of xmlElementStart, xmlElementOpen:
             if RELEVANT_XML_TAGS.contains(xml.elementName):
-                textBuffer = ""
+                textBuffer.delete(0, textBuffer.len - 1)
                 gettingText = true
             elif xml.elementName == "page":
-                # clear article data for the new page
-                for tag in TITLE..NS:
-                    article[tag] = ""
+                # clear redirect status
+                article[REDIRECT] = ""
         of xmlElementEnd:
             case xml.elementName
             of "title":
