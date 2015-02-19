@@ -9,7 +9,7 @@ let ANYTHING_INTERESTING_RE: Regex = re"[*#:{[']"
 
 # We skip the contents of these HTML tags entirely, and they don't nest
 # inside each other.
-let SKIP_SPANS = [
+const SKIP_SPANS = [
     "cite", "hiero", "gallery", "timeline", "noinclude",
     "caption", "ref", "references", "img", "source", "math"
 ]
@@ -18,8 +18,7 @@ let SKIP_SPANS = [
 let FORMATTING_RE: Regex = re(r"('''|''|^#\s*REDIRECT.*$|^[ *#:]+|^[|].*$)", {reMultiLine})
 let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
 
-let FAKE_FILENAME = "<wikipage>"
-let TEMPLATE_SYMBOL = ""  # define this as a string to replace templates with
+const FAKE_FILENAME = "<wikipage>"
 
 proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
     ## Move our position 'pos' forward in the text, to skip a number of
@@ -80,10 +79,16 @@ proc filterLink(text: string, pos: var int): string =
         return extractExternalLink(text[startPos .. <pos])
 
 
+var tstream: StringStream = newStringStream()
+
 proc filterHTML(text: string): string =
     var xml: XmlParser
-    let tstream: StringStream = newStringStream(text)
-    result = ""
+
+    # Quickly copy the text into the StringStream object
+    shallowCopy(tstream.data, text)
+    tstream.setPosition(0)
+
+    result = newStringOfCap(text.len)
     xml.open(tstream, FAKE_FILENAME, options={reportWhitespace})
     while true:
         xml.next()
@@ -115,7 +120,7 @@ proc filterWikitext(text: string): string =
     # This method works by building a 'result' string incrementally, and
     # advancing an index called 'pos' through the text as it goes. Some
     # of the procedures this relies on will also advance 'pos' themselves.
-    result = ""
+    result = newStringOfCap(text.len)
     var pos = 0
     while pos < text.len:
         # Skip to the next character that could be wiki syntax.
@@ -131,9 +136,7 @@ proc filterWikitext(text: string): string =
         pos = found
         if pos < text.len:
             if text[pos .. pos+1] == "{{" or text[pos .. pos+1] == "{|":
-                # replace template invocations with <T>
                 skipNestedChars(text, pos, '{', '}')
-                result.add(TEMPLATE_SYMBOL)
 
             elif text[pos] == '[':
                 # pos gets updated by filterLink
@@ -180,21 +183,21 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
         case xml.kind
         of xmlElementStart, xmlElementOpen:
             if RELEVANT_XML_TAGS.contains(xml.elementName):
-                textBuffer.delete(0, textBuffer.len - 1)
+                textBuffer.setLen(0)
                 gettingText = true
             elif xml.elementName == "page":
                 # clear redirect status
-                article[REDIRECT] = ""
+                article[REDIRECT].setLen(0)
         of xmlElementEnd:
             case xml.elementName
             of "title":
-                article[TITLE] = textBuffer
+                swap article[TITLE], textBuffer
             of "text":
-                article[TEXT] = textBuffer
+                swap article[TEXT], textBuffer
             of "redirect":
-                article[REDIRECT] = textBuffer
+                swap article[REDIRECT], textBuffer
             of "ns":
-                article[NS] = textBuffer
+                swap article[NS], textBuffer
             of "page":
                 handleArticle(article)
             else:
