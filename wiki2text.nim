@@ -5,23 +5,19 @@ import streams, parsexml, re, strutils
 
 # This regex matches anywhere in the text that there *might* be wiki syntax
 # that we have to clean up.
-var anythingInterestingRE: Regex = re"[*#:{['=]"
+var ANYTHING_INTERESTING_RE: Regex = re"[*#:{['=]"
 
 # We skip the contents of these HTML tags entirely, and they don't nest
 # inside each other.
-var skipSpans = [
+var SKIP_SPANS = [
     "cite", "hiero", "gallery", "timeline", "noinclude",
     "caption", "ref", "references", "img", "source", "math"
 ]
 
 # This regex is for matching and skipping over simple wikitext formatting.
-var formattingRE: Regex = re(r"('''|''|^[ *#:]+|^[ =]+|[ =]+$)", {reMultiLine})
+var FORMATTING_RE: Regex = re(r"('''|''|^[ *#:]+|^[ =]+|[ =]+$)", {reMultiLine})
 
-var wikiTableStartRE: Regex = re"\{\|"
-var wikiTableEndRE: Regex = re"\|\}"
-
-# This matches the start of pseudo-links that we want to skip completely.
-var ignoredLinkRE: Regex = re"\[\[(Category|File|Image):"
+var FAKE_FILENAME = "<wikipage>"
 
 
 proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
@@ -33,53 +29,19 @@ proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
     pos += 1
     var count = 1
     while count > 0 and pos < text.len:
-        var openPos, closePos: int
-        openPos = text.find(open, pos)
-        closePos = text.find(close, pos)
-        if closePos == -1:
+        var nextPos: int = text.find({open, close}, pos)
+        if nextPos == -1:
             # We can't find any more closing characters in the text.
             # Abort here so that there's something left.
             return
-        if openPos == -1:
-            # No more nesting -- jump to after the closing tag
-            pos = closePos + 1
-            count -= 1
         else:
-            # Handle the next opening or closing character
-            if openPos < closePos:
-                pos = openPos + 1
+            var nextChar: char = text[nextPos]
+            if nextChar == open:
                 count += 1
             else:
-                pos = closePos + 1
                 count -= 1
+            pos = nextPos + 1
 
-
-proc skipNestedREs(text: string, pos: var int, open: Regex, close: Regex) =
-    ## Move our position 'pos' forward in the text, to skip a number of
-    ## matching instances of the regular expressions 'open' and 'close'.
-    ##
-    ## Precondition: The text matches open at pos
-    ## Postcondition: pos will increase by at least 1
-    pos += 1
-    var count = 1
-    while count > 0 and pos < text.len:
-        let (openStart, openEnd) = text.findBounds(open, pos)
-        let (closeStart, closeEnd) = text.findBounds(close, pos)
-        if closeStart == -1:
-            # If we can't find the closing tag anywhere, bail out
-            return
-        if openStart == -1:
-            # No nested tags -- jump to after the closing tag
-            pos = closeEnd + 1
-            count -= 1
-        else:
-            # Handle the next opening or closing tag
-            if openStart < closeStart:
-                pos = openEnd + 1
-                count += 1
-            else:
-                pos = closeEnd + 1
-                count -= 1
 
 # forward declaration
 proc filterWikitext(text: string): string
@@ -113,9 +75,7 @@ proc filterLink(text: string, pos: var int): string =
 
     # Figure out what we skipped. If it's an ugly pseudo-link, return
     # nothing.
-    if text.match(ignoredLinkRE, startPos):
-        return ""
-    elif text[startPos .. startPos + 1] == "[[":
+    if text[startPos .. startPos + 1] == "[[":
         # Get the displayed text out of the internal link.
         return extractInternalLink(text[startPos .. <pos])
     else:
@@ -126,12 +86,12 @@ proc filterLink(text: string, pos: var int): string =
 proc filterHTML(text: string): string =
     var xml: XmlParser
     result = ""
-    xml.open(newStringStream(text), "<wikipage>", options={reportWhitespace})
+    xml.open(newStringStream(text), FAKE_FILENAME, options={reportWhitespace})
     while true:
         xml.next()
         case xml.kind
         of xmlElementStart, xmlElementOpen:
-            if skipSpans.contains(xml.elementName):
+            if SKIP_SPANS.contains(xml.elementName):
                 var skipTo: string = xml.elementName
                 while true:
                     xml.next()
@@ -159,7 +119,7 @@ proc filterWikitext(text: string): string =
     var matched: int
     while pos < text.len:
         # Skip to the next character that could be wiki syntax.
-        var found: int = text.find(anythingInterestingRE, pos)
+        var found: int = text.find(ANYTHING_INTERESTING_RE, pos)
         if found == -1:
             found = text.len
 
@@ -170,12 +130,9 @@ proc filterWikitext(text: string): string =
         # Figure out what's here and deal with it.
         pos = found
         if pos < text.len:
-            if text[pos .. pos+1] == "{{":
+            if text[pos .. pos+1] == "{{" or text[pos .. pos+1] == "{|":
                 # skip template invocations
                 skipNestedChars(text, pos, '{', '}')
-
-            elif text[pos .. pos+1] == "{|":
-                skipNestedREs(text, pos, wikiTableStartRE, wikiTableEndRE)
 
             elif text[pos] == '[':
                 # pos gets updated by filterLink
@@ -183,7 +140,7 @@ proc filterWikitext(text: string): string =
 
             else:
                 # Skip over formatting
-                matched = text.matchLen(formattingRE, pos)
+                matched = text.matchLen(FORMATTING_RE, pos)
                 if matched > 0:
                     pos += matched
                 else:
@@ -200,7 +157,7 @@ type
         TITLE, TEXT, REDIRECT, NS
     ArticleData = array[TagType, string]
 
-var relevantXMLTags = ["title", "text", "redirect", "ns"]
+var RELEVANT_XML_TAGS = ["title", "text", "redirect", "ns"]
 
 proc handleArticle(article: ArticleData) =
     if article[NS] == "0" and article[REDIRECT] == "":
@@ -218,7 +175,7 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
         xml.next()
         case xml.kind
         of xmlElementStart, xmlElementOpen:
-            if relevantXMLTags.contains(xml.elementName):
+            if RELEVANT_XML_TAGS.contains(xml.elementName):
                 textBuffer = ""
                 gettingText = true
             elif xml.elementName == "page":
