@@ -85,8 +85,9 @@ proc filterLink(text: string, pos: var int): string =
 
 proc filterHTML(text: string): string =
     var xml: XmlParser
+    var tstream: StringStream = newStringStream(text)
     result = ""
-    xml.open(newStringStream(text), FAKE_FILENAME, options={reportWhitespace})
+    xml.open(tstream, FAKE_FILENAME, options={reportWhitespace})
     while true:
         xml.next()
         case xml.kind
@@ -102,9 +103,12 @@ proc filterHTML(text: string): string =
         of xmlCharData, xmlWhitespace:
             result.add(xml.charData)
         of xmlEof:
-            return result
+            break
         else:
             discard
+
+    # return result implicitly
+    xml.close
 
 
 proc filterWikitext(text: string): string =
@@ -204,6 +208,7 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
             break
         else:
             discard
+    xml.close
 
 
 when isMainModule:
