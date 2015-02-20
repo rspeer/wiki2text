@@ -1,2 +1,2 @@
 #!/bin/sh
-nim c infiniteXML.nim && nim c benchmark.nim && ./infiniteXML | ./benchmark
+nim -d:release c infiniteXML.nim && nim -d:release c benchmark.nim && ./infiniteXML | ./benchmark
