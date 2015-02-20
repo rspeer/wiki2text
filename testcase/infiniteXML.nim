@@ -21,7 +21,8 @@ proc outputText() =
 proc outputIdent(): string =
     var ident = ""
     var rand: int
-    var n_pieces: int = random(10) + 1
+    # occasional really long identifiers
+    var n_pieces: int = pow(random(1.0001), 150000).toInt + random(10) + 1
     for i in 1..n_pieces:
         rand = random(IDENT_CHARACTERS.len)
         ident.add(IDENT_CHARACTERS[rand])

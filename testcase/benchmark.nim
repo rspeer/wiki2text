@@ -15,7 +15,7 @@ proc benchmarkXML(input: Stream, filename="<input>") =
             count += 1
             chars += len(xml.elementName)
             let elapsed = cpuTime() - t0
-            if count == 100_000:
+            if count == 10_000:
                 let rate = toFloat(count) / elapsed
                 let charRate = toFloat(chars) / elapsed
                 t0 = cpuTime()
