@@ -166,8 +166,15 @@ var RELEVANT_XML_TAGS = ["title", "text", "redirect", "ns"]
 proc handleArticle(article: ArticleData) =
     if article[NS] == "0" and article[REDIRECT] == "":
         echo("= $1 =" % [article[TITLE]])
-        let text = filterWikitext(filterHTML(article[TEXT]))
-        echo(text.replace(BLANK_LINE_RE, "\n"))
+        # Parse the article inside a try/except block, discarding the errors
+        # that appear due to occasional HTML that's flagrantly bad XML.
+        try:
+            let text = filterWikitext(filterHTML(article[TEXT]))
+            echo(text.replace(BLANK_LINE_RE, "\n"))
+        except IndexError:
+            discard
+        except RangeError:
+            discard
 
 
 proc readMediaWikiXML(input: Stream, filename="<input>") =
