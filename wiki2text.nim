@@ -15,7 +15,7 @@ const SKIP_SPANS = [
 ]
 
 # This regex is for matching and skipping over simple wikitext formatting.
-let FORMATTING_RE: Regex = re(r"('''|''|^#\s*REDIRECT.*$|^[ *#:]+|^[|].*$)", {reMultiLine})
+let FORMATTING_RE: Regex = re(r"('''|''|^#\s*REDIRECT.*$|^[ *#:;]+|\n[|].*\n)", {reMultiLine})
 let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
 
 const FAKE_FILENAME = "<wikipage>"
