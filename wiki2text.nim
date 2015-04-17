@@ -1,3 +1,10 @@
+# There are two steps to interpreting a Wikipedia XML file. First, we need to
+# get the data out of the XML, which requires a streaming XML parser.
+#
+# Then, we need to deal with the actual content of an article, which is in
+# a hybrid of HTML and MediaWiki's own syntax. The way that we handle the
+# HTML tags (mostly for the purpose of skipping their contents)
+
 import streams, parsexml, re, strutils
 
 # Wikitext handling
@@ -5,18 +12,41 @@ import streams, parsexml, re, strutils
 
 # This regex matches anywhere in the text that there *might* be wiki syntax
 # that we have to clean up.
-let ANYTHING_INTERESTING_RE: Regex = re"[*#:{[']"
+let ANYTHING_INTERESTING_RE: Regex = re"[*#:;|!{[']"
 
 # We skip the contents of these HTML tags entirely, and they don't nest
 # inside each other.
 const SKIP_SPANS = [
-    "cite", "hiero", "gallery", "timeline", "noinclude",
-    "caption", "ref", "references", "img", "source", "math"
+    "cite", "ref", "hiero", "gallery", "timeline", "noinclude",
+    "caption", "references", "img", "source", "math"
 ]
 
 # This regex is for matching and skipping over simple wikitext formatting.
-let FORMATTING_RE: Regex = re(r"('''|''|^#\s*REDIRECT.*$|^[ *#:;]+|\n[|].*\n)", {reMultiLine})
+# Here's the breakdown of the patterns we're matching:
+#
+#   '''?                         = Bold and italic formatting (two or three apostrophes)
+#   ^#\s*(REDIRECT|redirect).*$  = Redirect syntax
+#   ^[ *#:;]+                    = Bullets and indentation markers at the start of a line
+#   ^[|!].*$                     = Table detritus
+#
+# "Table detritus" might require some explanation. Tables, delimited by {|
+# and |}, are something that we skip separately in filterWikitext. But
+# because MediaWiki is insane like this, some tables are made using syntax
+# that uses a template for the beginning of the table and |} syntax for the
+# end.
+#
+# Because we don't know what's in templates, when this happens, we end up
+# just seeing the inside and end of the table as if it were text. Usually,
+# though, these lines begin with the cell separator |, so we can just filter
+# those out.
+
+
+let FORMATTING_RE: Regex = re(r"('''?|^#\s*redirect.*$|^[ *#:;]+|^[|!].*$)", {reMultiLine, reIgnoreCase})
+
+# This regex matches sequences of more than one blank line.
 let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
+
+let EMPTY_REF_RE: Regex = re(r"<ref [^>]+/\s*>", {reIgnoreCase})
 
 const FAKE_FILENAME = "<wikipage>"
 
@@ -32,7 +62,8 @@ proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
         let nextPos: int = text.find({open, close}, pos)
         if nextPos == -1:
             # We can't find any more closing characters in the text.
-            # Abort here so that there's something left.
+            # Jump to the end and abort.
+            pos = text.len
             return
         else:
             let nextChar: char = text[nextPos]
@@ -81,7 +112,8 @@ proc filterLink(text: string, pos: var int): string =
 
 var tstream: StringStream = newStringStream()
 
-proc filterHTML(text: string): string =
+proc filterHTML(origText: string): string =
+    let text = origText.replace(EMPTY_REF_RE, "<ref />")
     var xml: XmlParser
 
     # Quickly copy the text into the StringStream object
