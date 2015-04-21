@@ -1,9 +1,11 @@
 # There are two steps to interpreting a Wikipedia XML file. First, we need to
 # get the data out of the XML, which requires a streaming XML parser.
 #
-# Then, we need to deal with the actual content of an article, which is in
-# a hybrid of HTML and MediaWiki's own syntax. The way that we handle the
-# HTML tags (mostly for the purpose of skipping their contents)
+# Then, we need to deal with the actual content of an article, which is in a
+# hybrid of HTML and MediaWiki's own syntax. The way that we handle the HTML
+# tags (mostly for the purpose of skipping their contents) is to run them
+# through another streaming XML parser. This one doesn't really need to be
+# streaming, but it might as well be so that we can reuse the same Nim library.
 
 import streams, parsexml, re, strutils
 
