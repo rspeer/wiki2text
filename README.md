@@ -1,9 +1,13 @@
 # wiki2text
 
-wiki2text is a very fast pipeline that takes a MediaWiki XML dump -- such as
-the exports of Wikipedia that you can download from [dumps.wikimedia.org][]
--- and extract just the natural-language text from them, skipping the
-Wiki formatting characters.
+**What you put in:** a .xml.bz2 file downloaded from Wikimedia
+
+**What you get out**: gigabytes of clean natural language text
+
+wiki2text is a fast pipeline that takes a MediaWiki XML dump -- such as the
+exports of Wikipedia that you can download from [dumps.wikimedia.org][] -- and
+extract just the natural-language text from them, skipping the Wiki formatting
+characters and the HTML tags.
 
 This is particularly useful as a way to get free corpora, in many languages,
 for natural language processing.
@@ -11,13 +15,13 @@ for natural language processing.
 The only formatting you will get is that the titles of new articles and new
 sections will appear on lines that start and end with some number of `=` signs.
 I've found it useful to distinguish titles from body text. If you don't need
-this, these lines are easy to grep out.
+this, these lines are easy to exclude using `grep -v`.
 
 wiki2text is written with these goals in mind:
 
 - Clean code that is clear about what it's doing
 - Doing no more than is necessary
-- Being really incredibly fast
+- Being incredibly fast (it parses an entire Wikipedia in minutes)
 - Being usable as a step in a pipeline
 
 Thanks to def-, a core Nim developer, for making optimizations that make the
@@ -25,19 +29,26 @@ code so incredibly fast.
 
 [dumps.wikimedia.org]: https://dumps.wikimedia.org/backup-index.html
 
+## Why Nim?
+
+Why is this code written in a fast-moving, emerging programming language? It's
+an adaptation of a Python script that took *days* to run. Nim allowed me to
+keep the understandability of Python but also have the speed of C.
+
 ## Setup
 
 wiki2text requires Nim 0.10.3 (currently a development version), or possibly
-later. It should run in 0.10.2, but recent updates to Nim's string allocation
-will increase its speed dramatically.
+later. Wikimedia text manages to hit many edge cases of Nim's XML parser,
+encountering some bugs if you run it on 0.10.2. See the [instructions for
+installing the devel version](http://nim-lang.org/download.html).
 
-When nim is installed, use this command to compile the fastest possible binary:
+When nim is installed, just run:
 
-    nim c -d:release wiki2text.nim
+    make
 
 ## Usage
 
-Download one of the database dumps from [dumps.wikimedia.org]. The filename
+Download one of the database dumps from [dumps.wikimedia.org][]. The filename
 you want should be the one of the form `*-pages-articles.xml.bz2`. These files
 can be many gigabytes in size, so you might want to start with a language besides
 English, with a smaller number of articles.
@@ -47,11 +58,16 @@ run:
 
     bunzip2 -c enwiki-DATE-pages-articles.xml.bz2 | ./wiki2text > enwiki.txt
 
+To skip all headings, run:
+
+    bunzip2 -c enwiki-DATE-pages-articles.xml.bz2 | ./wiki2text | grep -v '^=' > enwiki.txt
+
 enwiki.txt will fill up with article text as quickly as it comes out of `bunzip2`.
 
 ## Example output
 
-Here's an example of part of the text that comes out of the English Wikipedia:
+Here's an example of part of the text that comes out of the English Wikipedia
+(with hard line wrapping added):
 
     = Albedo =
 
@@ -114,8 +130,8 @@ You may notice that occasional words and phrases are missing from the text.
 These are the parts of the article that come from MediaWiki templates.
 
 Templates are an incredibly complicated, Turing-complete subset of MediaWiki,
-and are used for everything from simple formatting to building large infoboxes
-and navigation boxes.
+and are used for everything from simple formatting to building large infoboxes,
+tables, and navigation boxes.
 
 It would be nice if we could somehow keep only the simple ones and discard
 the complex ones, but what's easiest to do is to simply ignore every template.
@@ -123,4 +139,10 @@ the complex ones, but what's easiest to do is to simply ignore every template.
 Sometimes templates contain the beginnings or ends of HTML or Wikitable
 formatting that we would normally skip, in which case extra crud may show up in
 the article.
+
+This probably doesn't work very well for wikis that have specific, meaningful
+formatting, such as Wiktionary. The [conceptnet5][] project includes a slow
+Wiktionary parser in Python that you might be able to use.
+
+[conceptnet5]: https://github.com/commonsense/conceptnet5
 
