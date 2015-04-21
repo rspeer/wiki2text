@@ -193,7 +193,7 @@ type
         TITLE, TEXT, REDIRECT, NS
     ArticleData = array[TagType, string]
 
-var RELEVANT_XML_TAGS = ["title", "text", "redirect", "ns"]
+var RELEVANT_XML_TAGS = ["title", "text", "ns"]
 
 proc handleArticle(article: ArticleData) =
     if article[NS] == "0" and article[REDIRECT] == "":
@@ -216,6 +216,7 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
     for tag in TITLE..NS:
         article[tag] = ""
     var gettingText: bool = false
+    var gettingAttribute: bool = false
     xml.open(input, filename, options={reportWhitespace})
     while true:
         xml.next()
@@ -227,6 +228,11 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
             elif xml.elementName == "page":
                 # clear redirect status
                 article[REDIRECT].setLen(0)
+            elif xml.elementName == "redirect":
+                gettingAttribute = true
+        of xmlAttribute:
+            if gettingAttribute:
+                textBuffer.add(xml.attrValue)
         of xmlElementEnd:
             case xml.elementName
             of "title":
@@ -242,6 +248,7 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
             else:
                 discard
             gettingText = false
+            gettingAttribute = false
         of xmlCharData, xmlWhitespace:
             if gettingText:
                 textBuffer.add(xml.charData)
