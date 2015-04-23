@@ -83,9 +83,9 @@ proc extractInternalLink(linkText: string): string =
     # all away.
     if linkText.contains(':'):
         return ""
-    let contents: string = filterWikitext(linkText[2 .. < -2])
+    let contents: string = filterWikitext(linkText[2 .. ^3])
     let lastPart: int = contents.rfind('|') + 1
-    return contents[lastPart .. -1]
+    return contents[lastPart .. ^1]
 
 
 proc extractExternalLink(linkText: string): string =
@@ -93,7 +93,7 @@ proc extractExternalLink(linkText: string): string =
     if spacePos == -1:
         return ""
     else:
-        return filterWikitext(linkText[spacePos + 1 .. < -1])
+        return filterWikitext(linkText[spacePos + 1 .. ^2])
 
 
 proc filterLink(text: string, pos: var int): string =
@@ -104,7 +104,7 @@ proc filterLink(text: string, pos: var int): string =
 
     # Figure out what we skipped. If it's an ugly pseudo-link, return
     # nothing.
-    if text[startPos .. startPos + 1] == "[[":
+    if text.continuesWith("[[", startPos):
         # Get the displayed text out of the internal link.
         return extractInternalLink(text[startPos .. <pos])
     else:
@@ -169,7 +169,8 @@ proc filterWikitext(text: string): string =
         # Figure out what's here and deal with it.
         pos = found
         if pos < text.len:
-            if text[pos .. pos+1] == "{{" or text[pos .. pos+1] == "{|":
+            let next2chars: string = text[pos .. pos+1]
+            if next2chars == "{{" or next2chars == "{|":
                 skipNestedChars(text, pos, '{', '}')
 
             elif text[pos] == '[':
