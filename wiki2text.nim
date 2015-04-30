@@ -14,7 +14,7 @@ import streams, parsexml, re, strutils
 
 # This regex matches anywhere in the text that there *might* be wiki syntax
 # that we have to clean up.
-let ANYTHING_INTERESTING_RE: Regex = re"[*#:;|!{[']"
+let ANYTHING_INTERESTING_RE: Regex = re"[*#:;|!{['_]"
 
 # We skip the contents of these HTML tags entirely, and they don't nest
 # inside each other.
@@ -29,6 +29,7 @@ const SKIP_SPANS = [
 #   '''?                         = Bold and italic formatting (two or three apostrophes)
 #   ^#\s*(REDIRECT|redirect).*$  = Redirect syntax
 #   ^[ *#:;]+                    = Bullets and indentation markers at the start of a line
+#   ^__.*__$                     = table-of-contents directives
 #   ^[|!].*$                     = Table detritus
 #
 # "Table detritus" might require some explanation. Tables, delimited by {|
@@ -42,8 +43,7 @@ const SKIP_SPANS = [
 # though, these lines begin with the cell separator |, so we can just filter
 # those out.
 
-
-let FORMATTING_RE: Regex = re(r"('''?|^#\s*redirect.*$|^[ *#:;]+|^[|!].*$)", {reMultiLine, reIgnoreCase})
+let FORMATTING_RE: Regex = re(r"('''?|^#\s*redirect.*$|^[ *#:;]+|^[|!].*$|^__.*__$)", {reMultiLine, reIgnoreCase})
 
 # This regex matches sequences of more than one blank line.
 let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
