@@ -48,6 +48,8 @@ let FORMATTING_RE: Regex = re(r"('''?|^#\s*redirect.*$|^[ *#:;]+|^[|!].*$)", {re
 # This regex matches sequences of more than one blank line.
 let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
 
+let WORD_SEPARATOR_RE: Regex = re"[\x01-\x2f\x3a-\x40\x5b-\x60\x7b-\x7f]|(\xc2[\x80-\xbf])|(\xe2\x80.)|(\xe2\x81[\x80-\xaf])|(\xe3\x80[\x80-\x9f])"
+
 let EMPTY_REF_RE: Regex = re(r"<ref [^>]+/\s*>", {reIgnoreCase})
 
 const FAKE_FILENAME = "<wikipage>"
@@ -212,7 +214,13 @@ proc handleArticle(article: ArticleData) =
         # that appear due to occasional HTML that's flagrantly bad XML.
         try:
             let text = filterWikitext(filterHTML(article[TEXT]))
-            echo(text.replace(BLANK_LINE_RE, "\n"))
+            let words = text.split(WORD_SEPARATOR_RE)
+            for word in words:
+                if len(word) > 0:
+                    write(stdout, word)
+                    write(stdout, " ")
+            echo("")
+            #echo(text.replace(BLANK_LINE_RE, "\n"))
         except IndexError:
             discard
         except RangeError:
