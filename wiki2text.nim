@@ -115,6 +115,9 @@ proc filterLink(text: string, pos: var int): string =
 var tstream: StringStream = newStringStream()
 
 proc filterHTML(origText: string): string =
+    ## Scan through a Wiki page as HTML (Wikitext can have HTML tags mixed
+    ## into it). Remove HTML tags, as well as the content of certain tags
+    ## listed in SKIP_SPANS.
     let text = origText.replace(EMPTY_REF_RE, "<ref />")
     var xml: XmlParser
 
@@ -191,6 +194,10 @@ proc filterWikitext(text: string): string =
 # XML handling
 # ------------
 
+# ArticleData is an array that stores four string properties of a page: its
+# title, its text content, its redirect value if it redirects to another page,
+# and its namespace number. These are the XML values that we care about for
+# each page.
 type
     TagType = enum
         TITLE, TEXT, REDIRECT, NS
@@ -213,30 +220,55 @@ proc handleArticle(article: ArticleData) =
 
 
 proc readMediaWikiXML(input: Stream, filename="<input>") =
+    ## Read the XML content that one actually downloads from Wikimedia,
+    ## extracting the article content and sending it to the handleArticle()
+    ## procedure.
     var xml: XmlParser
     var textBuffer: string = ""
     var article: ArticleData
     for tag in TITLE..NS:
         article[tag] = ""
+    
+    # Keep track of what text content represents. Is it article text, or a
+    # similar text property of the page? Is it an attribute value on a tag that
+    # we should pay attention to?
     var gettingText: bool = false
     var gettingAttribute: bool = false
+
     xml.open(input, filename, options={reportWhitespace})
     while true:
+        # Scan through the XML, handling each token as it arrives.
         xml.next()
         case xml.kind
         of xmlElementStart, xmlElementOpen:
             if RELEVANT_XML_TAGS.contains(xml.elementName):
+                # If this is a "title", "text", or "ns" tag, prepare to get its
+                # text content. Move our writing pointer to the beginning of
+                # the text buffer, so we can overwrite what was there.
                 textBuffer.setLen(0)
                 gettingText = true
             elif xml.elementName == "page":
-                # clear redirect status
+                # If this is a new instance of the <page> tag that contains all
+                # these tags, then reset the value that won't necessarily be
+                # overridden, which is the redirect value.
                 article[REDIRECT].setLen(0)
             elif xml.elementName == "redirect":
+                # If this is the start of a redirect tag, prepare to get its
+                # attribute value.
                 gettingAttribute = true
         of xmlAttribute:
+            # If we're looking for an attribute value, and we found one, add it
+            # to the buffer.
             if gettingAttribute:
                 textBuffer.add(xml.attrValue)
+        of xmlCharData, xmlWhitespace:
+            # If we're looking for text, and we found it, add it to the buffer.
+            if gettingText:
+                textBuffer.add(xml.charData)
         of xmlElementEnd:
+            # When we reach the end of an element we care about, take the text
+            # we've found and store it in the 'article' data structure. We can
+            # accomplish this quickly by simply swapping their references.
             case xml.elementName
             of "title":
                 swap article[TITLE], textBuffer
@@ -247,14 +279,17 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
             of "ns":
                 swap article[NS], textBuffer
             of "page":
+                # When we reach the end of the <page> tag, send the article
+                # data to handleArticle().
                 handleArticle(article)
             else:
                 discard
+
+            # Now that we've reached the end of an element, stop extracting
+            # text. (We'll never need to extract text from elements that can
+            # have other XML elements nested inside them.)
             gettingText = false
             gettingAttribute = false
-        of xmlCharData, xmlWhitespace:
-            if gettingText:
-                textBuffer.add(xml.charData)
         of xmlEof:
             break
         else:
