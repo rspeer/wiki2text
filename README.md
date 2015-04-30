@@ -37,14 +37,18 @@ keep the understandability of Python but also have the speed of C.
 
 ## Setup
 
-wiki2text requires Nim 0.10.3 (currently a development version), or possibly
-later. Wikimedia text manages to hit many edge cases of Nim's XML parser,
-encountering some bugs if you run it on 0.10.2. See the [instructions for
-installing the devel version](http://nim-lang.org/download.html).
+wiki2text needs to be compiled using Nim 0.11. Install it by following the
+directions on [Nim's download page][].
 
-When nim is installed, just run:
+[Nim's download page]: http://nim-lang.org/download.html
+
+You can build Nim from this repository by running:
 
     make
+
+You can also install it using Nimble, Nim's package manager, instead:
+
+    nimble install wiki2text
 
 ## Usage
 
