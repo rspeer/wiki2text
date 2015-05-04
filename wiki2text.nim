@@ -7,7 +7,7 @@
 # through another streaming XML parser. This one doesn't really need to be
 # streaming, but it might as well be so that we can reuse the same Nim library.
 
-import streams, parsexml, re, strutils
+import streams, parsexml, re, strutils, unicode
 
 # Wikitext handling
 # -----------------
@@ -48,7 +48,7 @@ let FORMATTING_RE: Regex = re(r"('''?|^#\s*redirect.*$|^[ *#:;]+|^[|!].*$|^__.*_
 # This regex matches sequences of more than one blank line.
 let BLANK_LINE_RE: Regex = re"\n\s*\n\s*\n"
 
-let WORD_SEPARATOR_RE: Regex = re"[\x01-\x2f\x3a-\x40\x5b-\x60\x7b-\x7f]|(\xc2[\x80-\xbf])|(\xe2\x80.)|(\xe2\x81[\x80-\xaf])|(\xe3\x80[\x80-\x9f])"
+let WORD_SEPARATOR_RE: Regex = re"'?([\x01-\x26\x28-\x2f\x3a-\x40\x5b-\x60\x7b-\x7f]|(\xc2[\x80-\xbf])|(\xe2\x80.)|(\xe2\x81[\x80-\xaf])|(\xe3\x80[\x80-\x9f]))'?"
 
 let EMPTY_REF_RE: Regex = re(r"<ref [^>]+/\s*>", {reIgnoreCase})
 
@@ -76,6 +76,15 @@ proc skipNestedChars(text: string, pos: var int, open: char, close: char) =
             else:
                 count -= 1
             pos = nextPos + 1
+
+
+# Convert Unicode text to lowercase.
+# I hope this eventually ends up in the standard library.
+proc unicodeLower(text: string): string =
+    result = ""
+    for rune in runes(text):
+        result.add(rune.toLower.toUTF8)
+
 
 # forward declaration
 proc filterWikitext(text: string): string
@@ -207,25 +216,28 @@ type
 
 var RELEVANT_XML_TAGS = ["title", "text", "ns"]
 
-proc handleArticle(article: ArticleData) =
+proc handleArticle(article: ArticleData, tokenize: bool) =
     if article[NS] == "0" and article[REDIRECT] == "":
-        echo("= $1 =" % [article[TITLE]])
+        if not tokenize:
+            echo("= $1 =" % [article[TITLE]])
         # Parse the article inside a try/except block, discarding the errors
         # that appear due to occasional HTML that's flagrantly bad XML.
         try:
             let text = filterWikitext(filterHTML(article[TEXT]))
-            let words = text.split(WORD_SEPARATOR_RE)
-            for word in words:
-                if len(word) > 0:
-                    echo(word)
-            #echo(text.replace(BLANK_LINE_RE, "\n"))
+            if tokenize:
+                let words = text.split(WORD_SEPARATOR_RE)
+                for word in words:
+                    if len(word) > 0:
+                        echo(unicodeLower(word))
+            else:
+                echo(text.replace(BLANK_LINE_RE, "\n"))
         except IndexError:
             discard
         except RangeError:
             discard
 
 
-proc readMediaWikiXML(input: Stream, filename="<input>") =
+proc readMediaWikiXML(input: Stream, tokenize: bool, filename="<input>") =
     ## Read the XML content that one actually downloads from Wikimedia,
     ## extracting the article content and sending it to the handleArticle()
     ## procedure.
@@ -234,7 +246,7 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
     var article: ArticleData
     for tag in TITLE..NS:
         article[tag] = ""
-    
+
     # Keep track of what text content represents. Is it article text, or a
     # similar text property of the page? Is it an attribute value on a tag that
     # we should pay attention to?
@@ -287,7 +299,7 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
             of "page":
                 # When we reach the end of the <page> tag, send the article
                 # data to handleArticle().
-                handleArticle(article)
+                handleArticle(article, tokenize)
             else:
                 discard
 
@@ -304,5 +316,5 @@ proc readMediaWikiXML(input: Stream, filename="<input>") =
 
 
 when isMainModule:
-    readMediaWikiXML(newFileStream(stdin))
+    readMediaWikiXML(newFileStream(stdin), true)
 
