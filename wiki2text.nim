@@ -7,7 +7,7 @@
 # through another streaming XML parser. This one doesn't really need to be
 # streaming, but it might as well be so that we can reuse the same Nim library.
 
-import streams, parsexml, re, strutils, unicode
+import streams, parsexml, re, strutils, unicode, parseopt2
 
 # Wikitext handling
 # -----------------
@@ -315,6 +315,37 @@ proc readMediaWikiXML(input: Stream, tokenize: bool, filename="<input>") =
     xml.close
 
 
+const helptext: string = """
+wiki2text - transform MediaWiki XML to text
+Usage: wiki2text [-t] [-h]
+
+Options:
+-h	Show this help text
+-t	Use a simple tokenizer, outputting one word per line
+"""
+
+proc writeHelp() =
+    stderr.write(helptext)
+
+
 when isMainModule:
-    readMediaWikiXML(newFileStream(stdin), true)
+    var 
+        tokenize: bool = false
+        run: bool = true
+    for kind, key, val in getopt():
+        case kind
+        of cmdLongOption, cmdShortOption:
+            case key
+            of "tokenize", "t":
+                tokenize = true
+            of "help", "h":
+                writeHelp()
+                run = false
+            else:
+                discard
+        else:
+            discard
+
+    if run:
+        readMediaWikiXML(newFileStream(stdin), tokenize)
 
