@@ -217,9 +217,7 @@ proc handleArticle(article: ArticleData) =
             let words = text.split(WORD_SEPARATOR_RE)
             for word in words:
                 if len(word) > 0:
-                    write(stdout, word)
-                    write(stdout, " ")
-            echo("")
+                    echo(word)
             #echo(text.replace(BLANK_LINE_RE, "\n"))
         except IndexError:
             discard
