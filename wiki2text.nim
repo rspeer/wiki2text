@@ -94,6 +94,9 @@ proc extractInternalLink(linkText: string): string =
     # all away.
     if linkText.contains(':'):
         return ""
+    # If the brackets are unbalanced, return nothing.
+    if linkText[^2] != ']' or linkText[^1] != ']':
+        return ""
     let contents: string = filterWikitext(linkText[2 .. ^3])
     let lastPart: int = contents.rfind('|') + 1
     return contents[lastPart .. ^1]
@@ -104,7 +107,10 @@ proc extractExternalLink(linkText: string): string =
     if spacePos == -1:
         return ""
     else:
-        return filterWikitext(linkText[spacePos + 1 .. ^2])
+        if linkText[^1] == ']':
+            return ""
+        else:
+            return filterWikitext(linkText[spacePos + 1 .. ^2])
 
 
 proc filterLink(text: string, pos: var int): string =
@@ -113,8 +119,7 @@ proc filterLink(text: string, pos: var int): string =
     # No matter what, move pos to the end of the link
     skipNestedChars(text, pos, '[', ']')
 
-    # Figure out what we skipped. If it's an ugly pseudo-link, return
-    # nothing.
+    # Figure out what we skipped and try to return its displayed content.
     if text.continuesWith("[[", startPos):
         # Get the displayed text out of the internal link.
         return extractInternalLink(text[startPos .. <pos])
@@ -329,7 +334,7 @@ proc writeHelp() =
 
 
 when isMainModule:
-    var 
+    var
         tokenize: bool = false
         run: bool = true
     for kind, key, val in getopt():

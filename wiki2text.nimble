@@ -1,6 +1,6 @@
 [Package]
 name          = "wiki2text"
-version       = "0.1.0"
+version       = "0.2.1"
 author        = "Rob Speer"
 description   = "Quickly extracts natural-language text from a MediaWiki XML file."
 license       = "MIT"
@@ -9,4 +9,4 @@ SkipExt       = "nim"
 SkipFiles     = "Makefile"
 
 [Deps]
-Requires: "nim >= 0.10.3"
+Requires: "nim >= 0.11"
