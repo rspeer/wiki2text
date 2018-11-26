@@ -1,4 +1,13 @@
-# wiki2text
+# wiki2text (unmaintained)
+
+I don't work on this project anymore, and the Nim language has probably moved
+far beyond the version I used to make this. You may be able to make it work for
+you, but no guarantees.
+
+I now work on a full-blown LL parser for wikitext,
+[wikiparsec](https://github.com/LuminosoInsight/wikiparsec).
+
+# Original introduction
 
 **What you put in:** a .xml.bz2 file downloaded from Wikimedia
 
